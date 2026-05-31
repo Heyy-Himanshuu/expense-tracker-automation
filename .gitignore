@@ -1,0 +1,13 @@
+# Secrets & personal data — NEVER commit
+# config.json contains your Notion integration token + account info
+config.json
+# state.json holds the cursor + UPI reference numbers
+state.json
+# run.log / run.err.log / unparsed.log contain your bank SMS
+*.log
+*.tmp
+
+# OS / Python
+.DS_Store
+__pycache__/
+*.pyc

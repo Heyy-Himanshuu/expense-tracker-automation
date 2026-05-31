@@ -1,0 +1,24 @@
+{
+  "notion_token": "ntn_YOUR_INTERNAL_INTEGRATION_TOKEN_HERE",
+  "notion_version": "2022-06-28",
+  "expenses_database_id": "YOUR_EXPENSES_DATABASE_ID",
+  "account_last4": "1234",
+  "sender_match": "INDBNK",
+  "category_ids": {
+    "Food & Drinks": "YOUR_CATEGORY_PAGE_ID",
+    "Shopping": "YOUR_CATEGORY_PAGE_ID",
+    "Groceries": "YOUR_CATEGORY_PAGE_ID",
+    "Transport": "YOUR_CATEGORY_PAGE_ID",
+    "Entertainment": "YOUR_CATEGORY_PAGE_ID",
+    "Health & Fitness": "YOUR_CATEGORY_PAGE_ID",
+    "Miscellaneous": "YOUR_CATEGORY_PAGE_ID"
+  },
+  "category_keywords": {
+    "Food & Drinks": ["swiggy", "zomato", "eatfit", "diner", "restaurant", "cafe", "hotel", "food", "bakery", "pizza", "domino", "mcdonald", "kfc", "starbucks", "barbeque", "biryani", "chai", "juice"],
+    "Shopping": ["ajio", "myntra", "amazon", "flipkart", "pilgrim", "nykaa", "meesho", "tatacliq", "lifestyle", "trends", "decathlon", "ikea", "croma", "zudio", "westside", "shoppers stop"],
+    "Groceries": ["bigbasket", "blinkit", "zepto", "dmart", "instamart", "grocery", "jiomart", "supermarket", "kirana", "more retail", "village hyp", "taaza", "just fresh", "reliance fresh"],
+    "Transport": ["irctc", "railway", "uber", "ola", "rapido", "redbus", "fuel", "petrol", "metro", "fastag", "makemytrip", "ixigo", "cab", "auto", "indigo", "spicejet"],
+    "Health & Fitness": ["cult", "gym", "pharm", "apollo", "medplus", "hospital", "clinic", "fitness", "1mg", "practo", "diagnostic", "netmeds"],
+    "Entertainment": ["bookmyshow", "netflix", "spotify", "pvr", "inox", "hotstar", "prime video", "jio cinema", "steam", "youtube premium"]
+  }
+}
