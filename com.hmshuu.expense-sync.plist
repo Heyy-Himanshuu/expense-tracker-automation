@@ -6,18 +6,17 @@
     <string>com.hmshuu.expense-sync</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/hmshuu/Desktop/expense-sync/expense_sync.py</string>
+        <string>/Users/hmshuu/expense-sync/expense_sync.py</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/hmshuu/Desktop/expense-sync</string>
+    <string>/Users/hmshuu/expense-sync</string>
     <key>StartInterval</key>
     <integer>900</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/hmshuu/Desktop/expense-sync/run.log</string>
+    <string>/Users/hmshuu/expense-sync/run.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/hmshuu/Desktop/expense-sync/run.err.log</string>
+    <string>/Users/hmshuu/expense-sync/run.err.log</string>
 </dict>
 </plist>

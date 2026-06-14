@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/homebrew/bin/python3
 """
 expense_sync.py — auto-add Indian Bank UPI *debits* from macOS Messages to Notion.
 
