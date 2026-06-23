@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/python3
+#!/usr/bin/python3
 """
 expense_sync.py — auto-add Indian Bank UPI *debits* from macOS Messages to Notion.
 
@@ -70,6 +70,18 @@ def log_unparsed(when, sender, body):
 
 
 # ── chat.db reading ─────────────────────────────────────────────────────────
+class ChatDBUnavailable(Exception):
+    """Raised when ~/Library/Messages/chat.db can't be opened — almost always
+    because the Python interpreter lacks macOS Full Disk Access."""
+
+
+def _connect_chatdb():
+    try:
+        return sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
+    except sqlite3.OperationalError as e:
+        raise ChatDBUnavailable(e) from e
+
+
 def decode_body(text, attributed_body):
     """Return the message text. Modern macOS leaves `text` empty and stores the
     body in the `attributedBody` typedstream blob, after an 'NSString' marker
@@ -100,7 +112,7 @@ def decode_body(text, attributed_body):
 
 def fetch_messages(sender_match, min_rowid=None, since_ns=None):
     """Return [(rowid, date_ns, sender, body)] for bank SMS, ascending by rowid."""
-    con = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
+    con = _connect_chatdb()
     try:
         sql = (
             "SELECT m.ROWID, m.date, h.id, m.text, m.attributedBody "
@@ -122,7 +134,7 @@ def fetch_messages(sender_match, min_rowid=None, since_ns=None):
 
 
 def current_max_rowid(sender_match):
-    con = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
+    con = _connect_chatdb()
     try:
         row = con.execute(
             "SELECT MAX(m.ROWID) FROM message m LEFT JOIN handle h "
@@ -191,6 +203,7 @@ def notion_create(cfg, name, amount, iso_dt, category_id):
 # ── main ────────────────────────────────────────────────────────────────────
 def process(rows, cfg, state, dry_run):
     added = skipped = 0
+    net_error = False
     seen = set(state.get("seen_refs", []))
     for rowid, date_ns, sender, body in rows:
         if not body:
@@ -216,10 +229,73 @@ def process(rows, cfg, state, dry_run):
                 print(f"  ! Notion error {e.code} for {deb['merchant']}: "
                       f"{e.read().decode('utf-8', 'ignore')[:200]}", file=sys.stderr)
                 continue
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                # Transient network failure (DNS, timeout, connection reset).
+                # Skip this row without marking it seen; net_error keeps the
+                # cursor from advancing so the row is retried next run.
+                print(f"  ! Network error for {deb['merchant']}: {e}", file=sys.stderr)
+                net_error = True
+                continue
         seen.add(deb["ref"])
         added += 1
     state["seen_refs"] = list(seen)[-5000:]  # bound growth
-    return added, skipped
+    return added, skipped, net_error
+
+
+def _fda_help(err):
+    """Actionable guidance for the macOS Full Disk Access failure."""
+    return (
+        "ERROR: can't open the Messages database (~/Library/Messages/chat.db).\n"
+        f"  detail: {err}\n"
+        "macOS Full Disk Access is required for the interpreter running this script.\n"
+        "Fix it once:\n"
+        "  1. Open System Settings > Privacy & Security > Full Disk Access\n"
+        f"  2. Add (+) this binary:  {sys.executable}\n"
+        f"     (real path:           {os.path.realpath(sys.executable)})\n"
+        "  3. Toggle it ON, then re-run.  See SETUP.md.\n"
+    )
+
+
+def _run(cfg, sender, state, dry_run, do_init, backfill_days):
+    if do_init:
+        state["last_rowid"] = current_max_rowid(sender)
+        save_state(state)
+        print(f"Initialized cursor at ROWID {state['last_rowid']}. "
+              f"New transactions from now on will be captured.")
+        return
+
+    if backfill_days is not None:
+        cutoff = datetime.now() - timedelta(days=backfill_days)
+        since_ns = int((cutoff.timestamp() - APPLE_EPOCH) * 1_000_000_000)
+        rows = fetch_messages(sender, since_ns=since_ns)
+        print(f"Backfill: {len(rows)} bank SMS in the last {backfill_days} days"
+              + (" (dry-run)" if dry_run else "") + ":")
+        added, skipped, net_error = process(rows, cfg, state, dry_run)
+        if not dry_run:
+            if not net_error:  # don't skip past rows that failed to upload
+                state["last_rowid"] = current_max_rowid(sender)
+            save_state(state)
+        print(f"Done. added={added} skipped(dupes)={skipped}")
+        return
+
+    # First normal run with no state: don't flood — just set the cursor.
+    if not os.path.exists(STATE_PATH):
+        state["last_rowid"] = current_max_rowid(sender)
+        save_state(state)
+        print(f"First run — initialized cursor at ROWID {state['last_rowid']}. "
+              f"Run with --backfill N to import history.")
+        return
+
+    rows = fetch_messages(sender, min_rowid=state["last_rowid"])
+    added, skipped, net_error = process(rows, cfg, state, dry_run)
+    if not dry_run:
+        # Advance the cursor only when every row uploaded cleanly; seen_refs is
+        # always persisted so successful rows are never re-added on retry.
+        if rows and not net_error:
+            state["last_rowid"] = max(r[0] for r in rows)
+        save_state(state)
+    if added or skipped:
+        print(f"added={added} skipped(dupes)={skipped}")
 
 
 def main():
@@ -235,41 +311,11 @@ def main():
     sender = cfg.get("sender_match", "INDBNK")
     state = load_state() or {"last_rowid": 0, "seen_refs": []}
 
-    if do_init:
-        state["last_rowid"] = current_max_rowid(sender)
-        save_state(state)
-        print(f"Initialized cursor at ROWID {state['last_rowid']}. "
-              f"New transactions from now on will be captured.")
-        return
-
-    if backfill_days is not None:
-        cutoff = datetime.now() - timedelta(days=backfill_days)
-        since_ns = int((cutoff.timestamp() - APPLE_EPOCH) * 1_000_000_000)
-        rows = fetch_messages(sender, since_ns=since_ns)
-        print(f"Backfill: {len(rows)} bank SMS in the last {backfill_days} days"
-              + (" (dry-run)" if dry_run else "") + ":")
-        added, skipped = process(rows, cfg, state, dry_run)
-        if not dry_run:
-            state["last_rowid"] = current_max_rowid(sender)
-            save_state(state)
-        print(f"Done. added={added} skipped(dupes)={skipped}")
-        return
-
-    # First normal run with no state: don't flood — just set the cursor.
-    if not os.path.exists(STATE_PATH):
-        state["last_rowid"] = current_max_rowid(sender)
-        save_state(state)
-        print(f"First run — initialized cursor at ROWID {state['last_rowid']}. "
-              f"Run with --backfill N to import history.")
-        return
-
-    rows = fetch_messages(sender, min_rowid=state["last_rowid"])
-    added, skipped = process(rows, cfg, state, dry_run)
-    if not dry_run and rows:
-        state["last_rowid"] = max(r[0] for r in rows)
-        save_state(state)
-    if added or skipped:
-        print(f"added={added} skipped(dupes)={skipped}")
+    try:
+        _run(cfg, sender, state, dry_run, do_init, backfill_days)
+    except ChatDBUnavailable as e:
+        sys.stderr.write(_fda_help(e))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

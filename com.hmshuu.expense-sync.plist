@@ -6,6 +6,7 @@
     <string>com.hmshuu.expense-sync</string>
     <key>ProgramArguments</key>
     <array>
+        <string>/usr/bin/python3</string>
         <string>/Users/hmshuu/expense-sync/expense_sync.py</string>
     </array>
     <key>WorkingDirectory</key>
